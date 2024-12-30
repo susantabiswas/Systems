@@ -1,4 +1,6 @@
 #include <iostream>
+#include <csignal>
+#include <cstdint>
 using namespace std;
 
 #pragma region Memory Constants
@@ -25,6 +27,11 @@ enum Register {
     R_PC, // Program Counter
     R_COND, // Condition Flag, used to set the result (Neg, 0, Pos) of last operation
     R_COUNT // Simple trick to track the total registers in the VM
+};
+
+enum MemoryRegister {
+    MR_KBSR = 0xFE00, // Keyboard status register, can be used to check for keystrokes
+    MR_KBDR = 0xFE02 // Keyboard data register, can be used to know the key that was pressed
 };
 
 // Tracks the registers of the VM
@@ -90,6 +97,10 @@ enum TrapCode {
 
 #pragma region VM utils
 
+// This converts the big-endian data to little-endian
+// NOTE: Only bytes as whole are reversed not individual bits
+// eg 0x1234 -> 0x3412 (not 0x 4321) (byte1: 12 (0001 0010), byte2: 34 (0011 0100), in hexadecimal group of 4bits are used)
+
 uint16_t swap_byte_layout16(uint16_t val) {
     return (val << 8) | (val >> 8);
 }
@@ -130,6 +141,26 @@ bool load_image(const char* path) {
     read_image_file(img_file);
     fclose(img_file);
     return true;
+}
+
+uint16_t check_keypress() {
+    return 1;
+}
+
+uint16_t read_memory(uint16_t address) {
+    // special case: check if the address belongs to memory mapped register
+    if (address == MR_KBSR) {
+        // if there is a key press, set the KB status to 1
+        if (check_keypress()) {
+            memory[MR_KBSR] = (1 << 15);
+            memory[MR_KBDR] = getchar();
+        }
+        else {
+            memory[MR_KBSR] = 0;
+        }
+    }
+
+    return memory[address];
 }
 
 #pragma endregion VM utils
