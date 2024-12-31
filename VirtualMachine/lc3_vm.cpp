@@ -171,7 +171,11 @@ uint16_t check_keypress() {
     return select(STDIN_FILENO + 1, &readfds, NULL, NULL, &timeout);
 }
 
-uint16_t read_memory(uint16_t address) {
+void memory_write(uint16_t data, uint16_t address) {
+    memory[address] = data;
+}
+
+uint16_t memory_read(uint16_t address) {
     // special case: if it is memory mapped KB status reg, then check for
     // any updated status for keyboard
     if (address == MR_KBSR) {
