@@ -1,9 +1,18 @@
 #include <iostream>
 #include <csignal>
 #include <cstdint>
+// IO, terminal console related to unix
+#include <cstdlib>
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/termios.h>
+#include <sys/time.h>
+#include <sys/mman.h>
+
 using namespace std;
 
 #pragma region Memory Constants
+
 // LC-3 supports 16bit addressing, so it supports 2^16 ~ 65536 memory locations
 // and the word size (size of each memory location) is 16 bits (2 Bytes)
 // Total memory size supported = 2^16 * 2B = 2^17 Bytes = 128KB
@@ -11,6 +20,7 @@ const int MEMORY_MAX = 1 << 16;
 
 // Memory representation for this VM
 uint16_t memory[MEMORY_MAX];
+
 #pragma endregion Constants
 
 #pragma region Registers
@@ -100,7 +110,6 @@ enum TrapCode {
 // This converts the big-endian data to little-endian
 // NOTE: Only bytes as whole are reversed not individual bits
 // eg 0x1234 -> 0x3412 (not 0x 4321) (byte1: 12 (0001 0010), byte2: 34 (0011 0100), in hexadecimal group of 4bits are used)
-
 uint16_t swap_byte_layout16(uint16_t val) {
     return (val << 8) | (val >> 8);
 }
@@ -144,15 +153,31 @@ bool load_image(const char* path) {
 }
 
 uint16_t check_keypress() {
-    return 1;
+    // set of file descp to check for read events
+    fd_set readfds;
+    FD_ZERO(&readfds); // init to empty set
+    FD_SET(STDIN_FILENO, &readfds); // add stdin for tracking input event
+
+    // set the polling properties for select operation
+    // set the timeout (both sec and micro-sec) to 0, so that select will return immediately without blocking
+    struct timeval timeout;
+    timeout.tv_sec = 0;
+    timeout.tv_usec = 0;
+
+    // select will return the no. of file descp that have events
+    // The select function monitors the file descriptors in the sets provided for readability, writability, and exceptional conditions.
+    // the 1st arg of select is basically the max count + 1 till which the FD should be monitored, here we are
+    // monitoring only stdin, so we set it to STDIN_FILENO + 1
+    return select(STDIN_FILENO + 1, &readfds, NULL, NULL, &timeout);
 }
 
 uint16_t read_memory(uint16_t address) {
-    // special case: check if the address belongs to memory mapped register
+    // special case: if it is memory mapped KB status reg, then check for
+    // any updated status for keyboard
     if (address == MR_KBSR) {
         // if there is a key press, set the KB status to 1
         if (check_keypress()) {
-            memory[MR_KBSR] = (1 << 15);
+            memory[MR_KBSR] = (1 << 15); // MSB 1 indicating KB event
             memory[MR_KBDR] = getchar();
         }
         else {
@@ -161,6 +186,34 @@ uint16_t read_memory(uint16_t address) {
     }
 
     return memory[address];
+}
+
+// saves the current terminal settings
+struct termios original_tio;
+
+void disable_input_buffering() {
+    // save the terminal settings, which can be restored later
+    tcgetattr(STDIN_FILENO, &original_tio);
+    struct termios new_tio = original_tio;
+    // c_lflag controls the various terminal functions,
+    // disable canonical mode (line by line input) and input echo
+    // with canonical disabled, the input is taken char by char
+    new_tio.c_lflag &= ~ICANON & ~ECHO;
+
+    // set the new terminal settings
+    tcsetattr(STDIN_FILENO, TCSANOW, &new_tio);
+}
+
+void restore_input_buffering() {
+    // restore the orig terminal settings
+    tcsetattr(STDIN_FILENO, TCSANOW, &original_tio);
+}
+
+void handle_interrupt(int signal) {
+    // restore the terminal settings before exiting
+    restore_input_buffering();
+    cout << "Received signal: " << signal << endl;
+    exit(-2);
 }
 
 #pragma endregion VM utils
