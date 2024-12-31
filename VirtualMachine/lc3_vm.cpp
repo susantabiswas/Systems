@@ -114,6 +114,29 @@ uint16_t swap_byte_layout16(uint16_t val) {
     return (val << 8) | (val >> 8);
 }
 
+uint16_t extend_bits_by_sign(uint16_t bit_count, uint16_t val) {
+    // bit_count is the no. of bits in the value, it might be < 16 and hence
+    // the remaining positions have to be filled depending on the sign of number.
+    // if the MSB is 1, then the number is neg and should be filled
+    // with 1s, else fill with 0s
+    if ((value >> (bit_count - 1)) & 1)
+        value |= (0xFFFF < bit_count);
+    return value;
+}
+
+void update_cond_flag(uint16_t reg) {
+    // COND register's value is updated based on the value of
+    // last computation which is stored in the register
+    uint16_t value = registers[reg];
+
+    if (value == 0) 
+        registers[R_COND] = FL_ZRO;
+    else if (value >> 15) // if the MSB is 1, then it is a negative number
+        registers[R_COND] = FL_NEG;
+    else
+        registers[R_COND] = FL_POS;
+}
+
 void read_image_file(FILE* file) {
     // the LC3 machine code file starts with a 16-bit value that represents the starting address of the program
     // we will load the contents of the file into the memory starting from this address.
