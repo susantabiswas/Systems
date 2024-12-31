@@ -114,7 +114,7 @@ uint16_t swap_byte_layout16(uint16_t val) {
     return (val << 8) | (val >> 8);
 }
 
-uint16_t extend_bits_by_sign(uint16_t bit_count, uint16_t val) {
+uint16_t sign_extend_bits(uint16_t bit_count, uint16_t value) {
     // bit_count is the no. of bits in the value, it might be < 16 and hence
     // the remaining positions have to be filled depending on the sign of number.
     // if the MSB is 1, then the number is neg and should be filled
@@ -257,11 +257,11 @@ int main(int argc, const char* argv[]) {
     }
 
     // register the interrupt handler
-    signal(SIG_INT, interrupt_handler);
+    signal(SIGINT, interrupt_handler);
     // prepare the terminal
     disable_input_buffering();
 
-    register[R_COND] = FL_ZRO; // reset the condition flag
+    registers[R_COND] = FL_ZRO; // reset the condition flag
     registers[R_PC] = 0x3000; // start at the default 0x3000 mem addr
 
     cout << "LC-3 VM started..." << endl;
@@ -272,14 +272,130 @@ int main(int argc, const char* argv[]) {
         // Instruction cycle: fetch, decode, execute
 
         // fetch the instr pointed by PC
-        uint16_t instruction = memory_read(registers[R_PC++]);
+        uint16_t instruction = memory_read(registers[R_PC]++);
         // decode and execute
         uint16_t opcode = instruction >> 12; // first 4 bits is opcode
         
-        switch(opcode) {
+        switch (opcode) {
+            case OP_ADD:
+            {
+                // Has 2 variants: ADD and ADD IMM
+                // ADD DR, SR1, 0, 00, SR2 -> DR : SR1 + SR2
+                // ADD DR, SR1, 1, IMM5 -> DR : SR1 + IMM5
+                // get the 5th pos bit to decide the variant to use
+                uint16_t imm_mode = (instruction >> 5) & 0x1;
+                // destination register
+                uint16_t dr = (instruction >> 9) & 0x07; // each operand is 3bits long
+                // source register 1
+                uint16_t sr1 = (instruction >> 6) & 0x07;
+
+                if (imm_mode) {
+                    // if immediate mode, then the last 5bits are the immediate value
+                    // 0x1F = 0001 1111
+                    // expand the immediate value to full 16bits
+                    uint16_t imm5 = sign_extend_bits(5, instruction & 0x1F);
+                    registers[dr] = registers[sr1] + imm5;
+                }
+                else {
+                    // source register 2
+                    uint16_t sr2 = (instruction & 0x07);
+                    registers[dr] = registers[sr1] + registers[sr2];
+                }
+
+                update_cond_flag(dr);
+                break;
+            }
+            case OP_AND:
+            {
+                // Has 2 variants: AND and AND IMM
+                // AND DR, SR1, 0, 00, SR2 -> DR : SR1 AND SR2
+                // AND DR, SR1, 1, IMM5 -> DR : SR1 AND IMM5
+                // get the 5th pos bit to decide the variant to use
+                uint16_t imm_mode = (instruction >> 5) & 0x1;
+                // destination register
+                uint16_t dr = (instruction >> 9) & 0x07; // each operand is 3bits long
+                // source register 1
+                uint16_t sr1 = (instruction >> 6) & 0x07;
+
+                if (imm_mode) {
+                    // if immediate mode, then the last 5bits are the immediate value
+                    // 0x1F = 0001 1111
+                    // expand the immediate value to full 16bits
+                    uint16_t imm5 = sign_extend_bits(5, instruction & 0x1F);
+                    registers[dr] = registers[sr1] & imm5;
+                }
+                else {
+                    // source register 2
+                    uint16_t sr2 = (instruction & 0x07);
+                    registers[dr] = registers[sr1] & registers[sr2];
+                }
+
+                update_cond_flag(dr);
+                break;
+            }
+            case OP_BR:
+            {
+                // Checks the condition flag with condition register and branches to the PC offset if same
+                // n|z|p|PCOffset(9b)
+                uint16_t nzp = (instruction >> 9) & 0x07;
+                uint16_t pc_offset = (instruction & 0x1FF);
+
+                if (nzp & registers[R_COND])
+                    registers[R_PC] += sign_extend_bits(9, pc_offset);
+                break;
+            }
+            case OP_JMP:
+            {   // Jump to the address stored in the base register
+                uint16_t base_reg = (instruction >> 5) & 0x07;
+                registers[R_PC] = registers[base_reg];
+                break;
+            }
+            case OP_JSR:
+            {   // Save the current PC in R7 and then jump to the address depending on the variant
+                registers[R_R7] = registers[R_PC];
+                
+                // Jump to the address stored in the PC offset
+                // JSR: 1|PCOffset(11b)
+                // Jump to the address stored in the base register
+                // JSRR: 0|00|BaseR(3b)|PCOffset(6b)
+                
+                // check the 11th bit to decide the variant
+                uint16_t flag = (instruction >> 11) & 0x1;
+
+                if (flag) // JSR
+                    registers[R_PC] += sign_extend_bits(11, instruction &0x7FF);
+                else // JSRR
+                    registers[R_PC] = registers[(instruction >> 6) & 0x07];
+                break;
+            }
+            case OP_LD:
+                break;
+            case OP_LDI:
+                break;
+            case OP_LDR:
+                break;
+            case OP_LEA:
+                break;
+            case OP_NOT:
+                break;
+            case OP_RES:
+                // reserved, illegal opcode exception thrown
+                break;
+            case OP_RTI:
+                break;
+            case OP_ST:
+                break;
+            case OP_STI:
+                break;
+            case OP_STR:
+                break;
+            case OP_TRAP:
+                break;
             default:
+            {
                 abort();
                 break;
+            }
         }
     }
 
