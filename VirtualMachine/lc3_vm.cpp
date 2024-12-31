@@ -236,7 +236,7 @@ void restore_input_buffering() {
     tcsetattr(STDIN_FILENO, TCSANOW, &original_tio);
 }
 
-void handle_interrupt(int signal) {
+void interrupt_handler(int signal) {
     // restore the terminal settings before exiting
     restore_input_buffering();
     cout << "Received signal: " << signal << endl;
@@ -256,6 +256,33 @@ int main(int argc, const char* argv[]) {
         exit(1);
     }
 
-    cout << "LC-3 VM running..." << endl;
+    // register the interrupt handler
+    signal(SIG_INT, interrupt_handler);
+    // prepare the terminal
+    disable_input_buffering();
+
+    register[R_COND] = FL_ZRO; // reset the condition flag
+    registers[R_PC] = 0x3000; // start at the default 0x3000 mem addr
+
+    cout << "LC-3 VM started..." << endl;
+    bool run = true;
+
+    // Instruction cycle control loop
+    while(run) {
+        // Instruction cycle: fetch, decode, execute
+
+        // fetch the instr pointed by PC
+        uint16_t instruction = memory_read(registers[R_PC++]);
+        // decode and execute
+        uint16_t opcode = instruction >> 12; // first 4 bits is opcode
+        
+        switch(opcode) {
+            default:
+                abort();
+                break;
+        }
+    }
+
+    restore_input_buffering();
     return 0;
 }
