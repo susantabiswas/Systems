@@ -1,1 +1,7 @@
+# Exclude object files
+**.o
 **.obj
+
+# Exclude executable files
+**.exe
+**.out
