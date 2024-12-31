@@ -146,10 +146,8 @@ void read_image_file(FILE* file) {
 
     // max no. of memory words that can be placed if we start from origin
     int max_lines = MEMORY_MAX - origin;
-
     // pos in memory where the file will be loaded
     uint16_t* file_ptr = memory + origin;
-
     // read the remaining data
     uint16_t lines_read = fread(file_ptr, sizeof(uint16_t), max_lines, file);
 
@@ -226,7 +224,6 @@ void disable_input_buffering() {
     // disable canonical mode (line by line input) and input echo
     // with canonical disabled, the input is taken char by char
     new_tio.c_lflag &= ~ICANON & ~ECHO;
-
     // set the new terminal settings
     tcsetattr(STDIN_FILENO, TCSANOW, &new_tio);
 }
@@ -250,7 +247,6 @@ int main(int argc, const char* argv[]) {
         cout << "Usage: lc3 <image-file>\n";
         exit(2); 
     }
-
     if (!load_image(argv[1])) {
         cout << "LC3 image load failed\n";
         exit(1);
@@ -334,8 +330,7 @@ int main(int argc, const char* argv[]) {
                 break;
             }
             case OP_BR:
-            {
-                // Checks the condition flag with condition register and branches to the PC offset if same
+            {   // Checks the condition flag with condition register and branches to the PC offset if same
                 // n|z|p|PCOffset(9b)
                 uint16_t nzp = (instruction >> 9) & 0x07;
                 uint16_t pc_offset = (instruction & 0x1FF);
@@ -353,7 +348,6 @@ int main(int argc, const char* argv[]) {
             case OP_JSR:
             {   // Save the current PC in R7 and then jump to the address depending on the variant
                 registers[R_R7] = registers[R_PC];
-                
                 // Jump to the address stored in the PC offset
                 // JSR: 1|PCOffset(11b)
                 // Jump to the address stored in the base register
