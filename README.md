@@ -1,7 +1,8 @@
 # Bytecode Virtual Machine: LC-3 Virtual Machine
 This project is an implementation of the LC-3 virtual machine in C++.
 
-Here is how a virtual machine fits into the picture. We can design a standard virtual machine architecture for the programming language. Irrespective of the platform, the compiler and interpreter only need to generate bytecode for that standard VM architecture (No need to have explicit versions of the code base for ARM, x86, Windows, etc). Then the Virtual machine runs that bytecode and executes the program.
+## How does a virtual machine fit into the picture?
+Think of this virtual machine like the Java Virtual Machine (JVM). Instead of writing platform-specific code, we design a standard virtual machine architecture for the programming language. Regardless of the platform, the compiler or interpreter generates bytecode for this standard VM architecture. This means there is no need to have different versions of the codebase for ARM, x86, Windows, etc. The virtual machine then runs this bytecode and executes the program, ensuring compatibility across various platforms.
 ```
 +---------------------+
 |  Source Code (C,    |
