@@ -120,7 +120,7 @@ uint16_t sign_extend_bits(uint16_t bit_count, uint16_t value) {
     // if the MSB is 1, then the number is neg and should be filled
     // with 1s, else fill with 0s
     if ((value >> (bit_count - 1)) & 1)
-        value |= (0xFFFF < bit_count);
+        value |= (0xFFFF << bit_count);
     return value;
 }
 
@@ -334,17 +334,17 @@ int main(int argc, const char* argv[]) {
                 // Checks the condition flag with condition register and branches to the PC offset if same
                 // n|z|p|PCOffset(9b)
                 uint16_t nzp = (instruction >> 9) & 0x7;
-                uint16_t pc_offset = (instruction & 0x1FF);
+                uint16_t pc_offset = sign_extend_bits(9, instruction & 0x1FF);
 
                 if (nzp & registers[R_COND])
-                    registers[R_PC] += sign_extend_bits(9, pc_offset);
+                    registers[R_PC] += pc_offset;
                 break;
             }
             case OP_JMP:
-            {   // Jump
+            {   // Jump (RET when used with R7)
                 // Jump to the address stored in the base register
                 // JMP 000 BaseR(3b) 000000; PC = BaseR
-                uint16_t base_reg = (instruction >> 5) & 0x7;
+                uint16_t base_reg = (instruction >> 6) & 0x7;
                 registers[R_PC] = registers[base_reg];
                 break;
             }
@@ -361,9 +361,9 @@ int main(int argc, const char* argv[]) {
                 uint16_t flag = (instruction >> 11) & 0x1;
 
                 if (flag) // JSR
-                    registers[R_PC] += sign_extend_bits(11, instruction &0x7FF);
+                    registers[R_PC] += sign_extend_bits(11, instruction & 0x7FF);
                 else // JSRR
-                    registers[R_PC] = registers[(instruction >> 6) & 0x07];
+                    registers[R_PC] = registers[(instruction >> 6) & 0x7];
                 break;
             }
             case OP_LD:
@@ -447,7 +447,7 @@ int main(int argc, const char* argv[]) {
             case OP_STR:
             {   // Store register
                 // STR SR(3b), BaseR(3b), Offset(6b); mem[BaseR + SIGNEXT(PCOffset)] = SR
-                uint16_t sr = (instruction >> 8) & 0x7;
+                uint16_t sr = (instruction >> 9) & 0x7;
                 uint16_t base_r = (instruction >> 6) & 0x7;
                 uint16_t offset = sign_extend_bits(6, instruction & 0x3F);
                 memory_write(registers[sr], registers[base_r] + offset);
@@ -467,7 +467,7 @@ int main(int argc, const char* argv[]) {
                 // save the PC in R7 first before jumping to trap routine
                 registers[R_R7] = registers[R_PC];
                 // get the trap code from the last 8 bits (trapvect8)
-                uint16_t trap_code = instruction & 0x1FF;
+                uint16_t trap_code = instruction & 0xFF;
 
                 // NOTE: Since we are writing a VM to simulate the Lc3 arch, to make things simpler, instead of saving the routines at the
                 // specified memory locations and using trap vectors, we can instead handle it via the control flow similar to opcodes.
@@ -520,11 +520,11 @@ int main(int argc, const char* argv[]) {
                         uint16_t* str_ptr = memory + registers[R_R0];
                         while(str_ptr) {
                             char ch1 = (*str_ptr) & 0xFF; // 1st Byte
-                            char ch2 = (*str_ptr >> 8); // 2nd Byte
+                            char ch2 = (*str_ptr) >> 8; // 2nd Byte
                             putc(ch1, stdout);
                             // in case of only single char, 2nd byte will be 0
                             if (ch2)
-                                putc(ch2, stdout);;
+                                putc(ch2, stdout);
                             ++str_ptr;
                         }
                         fflush(stdout);
