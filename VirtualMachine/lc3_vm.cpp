@@ -272,6 +272,7 @@ int main(int argc, const char* argv[]) {
         // decode and execute
         uint16_t opcode = instruction >> 12; // first 4 bits is opcode
         
+        cout << opcode << " " << instruction << endl;
         switch (opcode) {
             case OP_ADD:
             {
@@ -454,7 +455,53 @@ int main(int argc, const char* argv[]) {
                 break;
             }
             case OP_TRAP:
+            {
+                // Trap routines are used to perform high-privilege operations in the LC-3 system.
+                // TRAP vector is 8 bits long, so the trap code is in the last 8 bits of the instruction
+                // Usually the trap routines are saved in the memory and the trap vector (x0000 to x00FF (256 locs))
+                // contains the starting memory location of each trap routine. When a trap instruction is executed, the PC is saved
+                // and the trap routine number is used to fetch the routine's memory addr from the trap vector.
+                // Eg TRAP x20 ; Directs the operating system to execute the GETC system call.
+                // ; The starting address of this system call is contained in memory location x0020.
+
+                // TRAP: 1111 0000 | trapvect8(8b)
+                // save the PC in R7 first before jumping to trap routine
+                registers[R_R7] = registers[R_PC];
+                // get the trap code from the last 8 bits (trapvect8)
+                uint16_t trap_code = instruction & 0x1FF;
+
+                switch (trap_code) {
+                    case TRAP_GETC:
+                    {
+                        break;
+                    }
+                    case TRAP_OUT:
+                    {
+                        break;
+                    }
+                    case TRAP_PUTS:
+                    {
+                        break;
+                    }
+                    case TRAP_IN:
+                    {
+                        break;
+                    }
+                    case TRAP_PUTSP:
+                    {
+                        break;
+                    }
+                    case TRAP_HALT:
+                    {
+                        break;
+                    }
+                    default:
+                    {
+                        break;
+                    }
+                }
                 break;
+            }
             default:
             {
                 abort();
