@@ -330,7 +330,8 @@ int main(int argc, const char* argv[]) {
                 break;
             }
             case OP_BR:
-            {   // Checks the condition flag with condition register and branches to the PC offset if same
+            {   // Branch
+                // Checks the condition flag with condition register and branches to the PC offset if same
                 // n|z|p|PCOffset(9b)
                 uint16_t nzp = (instruction >> 9) & 0x7;
                 uint16_t pc_offset = (instruction & 0x1FF);
@@ -340,14 +341,16 @@ int main(int argc, const char* argv[]) {
                 break;
             }
             case OP_JMP:
-            {   // Jump to the address stored in the base register
+            {   // Jump
+                // Jump to the address stored in the base register
                 // JMP 000 BaseR(3b) 000000; PC = BaseR
                 uint16_t base_reg = (instruction >> 5) & 0x7;
                 registers[R_PC] = registers[base_reg];
                 break;
             }
             case OP_JSR:
-            {   // Save the current PC in R7 and then jump to the address depending on the variant
+            {   // Jump register
+                // Save the current PC in R7 and then jump to the address depending on the variant
                 registers[R_R7] = registers[R_PC];
                 // Jump to the address stored in the PC offset
                 // JSR: 1|PCOffset(11b); PC = PC + SIGNEXT(PCOffset)
@@ -364,7 +367,7 @@ int main(int argc, const char* argv[]) {
                 break;
             }
             case OP_LD:
-            {
+            {   // Load
                 // Load the value from the memory location to the destination register
                 // LD DR(3b), PCOffset(9b); DR = mem[PC + SIGNEXT(PCOffset)]
                 uint16_t dr = (instruction >> 9) & 0x7;
@@ -374,7 +377,7 @@ int main(int argc, const char* argv[]) {
                 break;
             }
             case OP_LDI:
-            {
+            {   // Load Indirect
                 // LDI DR(3b), PCOffset(9b); DR = mem[mem[PC + SIGNEXT(PCOffset)]]
                 uint16_t dr = (instruction >> 9) & 0x7;
                 uint16_t pc_offset = sign_extend_bits(9, instruction & 0x1FF);
@@ -383,7 +386,7 @@ int main(int argc, const char* argv[]) {
                 break;
             }
             case OP_LDR:
-            {
+            {   // Load register
                 // LDR DR(3b), BaseR(3b), Offset(6b); DR = mem[BaseR + Offset]
                 uint16_t dr = (instruction >> 9) & 0x7;
                 uint16_t base_r = (instruction >> 6) & 0x7;
@@ -394,7 +397,7 @@ int main(int argc, const char* argv[]) {
                 break;
             }
             case OP_LEA:
-            {
+            {   // Load effective address
                 // LEA DR(3b), PCOffset(9b); DR = PC + SIGNEXT(PCOffset)
                 uint16_t dr = (instruction >> 9) & 0x7;
                 uint16_t pc_offset = sign_extend_bits(9, instruction & 0x1FF);
@@ -403,18 +406,53 @@ int main(int argc, const char* argv[]) {
                 break;
             }
             case OP_NOT:
+            {   // Bitwise not
+                // NOT DR(3b), SR(3b), 1, 11111; DR = NOT SR
+                uint16_t dr = (instruction >> 9) & 0x7;
+                uint16_t sr = (instruction >> 6) & 0x7;
+                registers[dr] = ~registers[sr];
+                update_cond_flag(dr);
                 break;
+            }
             case OP_RES:
-                // reserved, illegal opcode exception thrown
+            {    // reserved, illegal opcode exception thrown
                 break;
+            }
             case OP_RTI:
+            {
+                // unused in the VM but in the actual LC-3 system it is 
+                // used is used to return from an interrupt service routine (ISR)
+                // and restore the previous processor state. In a real LC-3 machine, 
+                // this involves switching from a privileged mode (used during the interrupt handling) 
+                // back to the user mode and restoring the program counter (PC) and 
+                // processor status register (PSR) from the stack.
                 break;
+            }
             case OP_ST:
+            {   // Store
+                // ST SR(3b), PCOffset(9b); mem[PC + SIGNEXT(PCOffset)] = SR
+                uint16_t sr = (instruction >> 9) & 0x7;
+                uint16_t pc_offset = sign_extend_bits(9, instruction & 0x1FF);
+                memory_write(registers[sr], registers[R_PC] + pc_offset);
                 break;
+            }
             case OP_STI:
+            {   // Store Indirect
+                // STI SR(3b), PCOffset(9b); mem[mem[PC + SIGNEXT(PCOffset)]] = SR
+                uint16_t sr = (instruction >> 9) & 0x7;
+                uint16_t pc_offset = sign_extend_bits(9, instruction & 0x1FF);
+                memory_write(registers[sr], memory_read(registers[R_PC] + pc_offset));
                 break;
+            }
             case OP_STR:
+            {   // Store register
+                // STR SR(3b), BaseR(3b), Offset(6b); mem[BaseR + SIGNEXT(PCOffset)] = SR
+                uint16_t sr = (instruction >> 8) & 0x7;
+                uint16_t base_r = (instruction >> 6) & 0x7;
+                uint16_t offset = sign_extend_bits(6, instruction & 0x3F);
+                memory_write(registers[sr], registers[base_r] + offset);
                 break;
+            }
             case OP_TRAP:
                 break;
             default:
