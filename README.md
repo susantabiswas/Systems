@@ -89,7 +89,7 @@ Are you on an ANSI terminal (y/n)?
 Received signal: 2
 ```
 
-![2048](assets//2048-lc3.gif)
+![2048](VirtualMachine//assets//2048-lc3.gif)
 
 ## Deep Dive
 The VM simulates the behavior of the LC-3 CPU, including instruction fetch, decode, and execute cycles. Below is a summary of the key components and flow of the VM:
