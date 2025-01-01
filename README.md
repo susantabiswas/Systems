@@ -37,11 +37,12 @@ Here is how a virtual machine fits into the picture. We can design a standard vi
 ### Capabilities of this VM
 - **16-bit Addressing**: Supports 2^16 (65,536) memory locations, each 16 bits wide.
 - **Registers**: Includes 8 general-purpose registers (R0-R7) and 2 special-purpose registers (PC and COND).
-- **Instruction Set**: Supports 16 different instructions, including arithmetic operations, memory access, control flow, and trap routines.
+- **Instruction Set**: Supports 16 different instructions, including arithmetic operations, memory access, control flow, and trap routines. 
 - **Memory-Mapped I/O**: Includes keyboard status and data registers for handling input.
 - **Condition Flags**: Uses 3 condition flags (Positive, Zero, Negative) to track the status of the last executed computation.
 - **Trap Routines**: Provides system calls for input/output operations and program control.
 
+`For instruction specifications and more details, you can follow` [LC-3 specification](https://www.jmeiners.com/lc3-vm/supplies/lc3-isa.pdf) 
 
 ## Prerequisites
 - C++11 or later
