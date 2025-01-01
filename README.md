@@ -1,7 +1,40 @@
-# LC-3 Virtual Machine
-This project is an implementation of the LC-3 (Little Computer 3) virtual machine in C++. The LC-3 is a simple, computer architecture.
+# Bytecode Virtual Machine: LC-3 Virtual Machine
+This project is an implementation of the LC-3 virtual machine in C++.
 
-### Capabilities of the LC-3 VM
+Here is how a virtual machine fits into the picture. We can design a standard virtual machine architecture for the programming language. Irrespective of the platform, the compiler and interpreter only need to generate bytecode for that standard VM architecture (No need to have explicit versions of the code base for ARM, x86, Windows, etc). Then the Virtual machine runs that bytecode and executes the program.
+```
++---------------------+
+|  Source Code (C,    |
+|  Python, Java, etc.)|
++----------+----------+
+           |
+           v
++----------+----------+
+|   Compiler/Interpreter|
+|  (Converts to Bytecode|
+|   or Machine Code)   |
++----------+----------+
+           |
+           v
++----------+----------+
+|  Bytecode/Machine   |
+|  Code               |
++----------+----------+
+           |
+           v
++----------+----------+
+|  Virtual Machine    |
+|  (Executes Bytecode)|
++----------+----------+
+           |
+           v
++----------+----------+
+|  Hardware (CPU,     |
+|  Memory, etc.)      |
++---------------------+
+```
+
+### Capabilities of this VM
 - **16-bit Addressing**: Supports 2^16 (65,536) memory locations, each 16 bits wide.
 - **Registers**: Includes 8 general-purpose registers (R0-R7) and 2 special-purpose registers (PC and COND).
 - **Instruction Set**: Supports 16 different instructions, including arithmetic operations, memory access, control flow, and trap routines.
@@ -24,6 +57,7 @@ cd Systems/VirtualMachine/
 ```
 
 ### Compile & Run
+We can run LC-3 machine code on this VM, we will use an ASCII version of the 2048 console game and run on this VM.
 ```sh
 g++ lc3_vm.cpp -o lc3
 # ./lc3 <path to lc3 assembled binary file>
