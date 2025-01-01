@@ -272,7 +272,6 @@ int main(int argc, const char* argv[]) {
         // decode and execute
         uint16_t opcode = instruction >> 12; // first 4 bits is opcode
         
-        cout << opcode << " " << instruction << endl;
         switch (opcode) {
             case OP_ADD:
             {
@@ -493,7 +492,8 @@ int main(int argc, const char* argv[]) {
                     {   
                         // write a word string (ASCII chars) to the console, starting addr
                         // is stored in R0, writing terminates when NULL (x0000) char is encountered
-                        uint16_t str_ptr = memory + registers[R_R0];
+                        // NOTE: one char per memory location (16bits or 2B)
+                        uint16_t* str_ptr = memory + registers[R_R0];
                         while (*str_ptr) {
                             putc((char)*str_ptr, stdout);
                             ++str_ptr;
@@ -503,14 +503,37 @@ int main(int argc, const char* argv[]) {
                     }
                     case TRAP_IN:
                     {
+                        // show a prompt, read a single char from the keyboard and store it in R0 and also write to console
+                        cout << "Enter a character";
+                        char ch = getchar();
+                        putc(ch, stdout);
+                        fflush(stdout);
+                        registers[R_R0] = (uint16_t)ch;
+                        update_cond_flag(R_R0);
                         break;
                     }
                     case TRAP_PUTSP:
                     {
+                        // write a byte string to the console, starting addr is stored in R0
+                        // Note: Here there are 2 chars per memory location, so each char per Byte.
+                        // We need to split the 16bit word into 2 bytes and write them to console
+                        uint16_t* str_ptr = memory + registers[R_R0];
+                        while(str_ptr) {
+                            char ch1 = (*str_ptr) & 0xFF; // 1st Byte
+                            char ch2 = (*str_ptr >> 8); // 2nd Byte
+                            putc(ch1, stdout);
+                            // in case of only single char, 2nd byte will be 0
+                            if (ch2)
+                                putc(ch2, stdout);;
+                            ++str_ptr;
+                        }
+                        fflush(stdout);
                         break;
                     }
                     case TRAP_HALT:
                     {
+                        cout << "Program Halted" << endl;
+                        run = false;
                         break;
                     }
                     default:
