@@ -470,6 +470,10 @@ int main(int argc, const char* argv[]) {
                 // get the trap code from the last 8 bits (trapvect8)
                 uint16_t trap_code = instruction & 0x1FF;
 
+                // NOTE: Since we are writing a VM to simulate the Lc3 arch, to make things simpler, instead of saving the routines at the
+                // specified memory locations and using trap vectors, we can instead handle it via the control flow similar to opcodes.
+                // In the OS implementation, the trap routines would have been saved in the memory locs and trap
+                // vector would have been used to get the routine's memory addr.
                 switch (trap_code) {
                     case TRAP_GETC:
                     {
