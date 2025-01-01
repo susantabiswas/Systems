@@ -31,7 +31,10 @@ g++ lc3_vm.cpp -o lc3
 ./lc3 assets/2048.obj
 ```
 ### Output
+
 ```
+Control the game using WASD keys.
+Are you on an ANSI terminal (y/n)?
 +--------------------------+
 |                          |
 |                     2    |
@@ -51,6 +54,8 @@ g++ lc3_vm.cpp -o lc3
 +--------------------------+
 Received signal: 2
 ```
+
+![2048](assets//2048-lc3.gif)
 
 ## Deep Dive
 The VM simulates the behavior of the LC-3 CPU, including instruction fetch, decode, and execute cycles. Below is a summary of the key components and flow of the VM:
