@@ -473,14 +473,28 @@ int main(int argc, const char* argv[]) {
                 switch (trap_code) {
                     case TRAP_GETC:
                     {
+                        // read a single char from the keyboard and store it in R0
+                        registers[R_R0] = (uint16_t)getchar();
+                        update_cond_flag(R_R0);
                         break;
                     }
                     case TRAP_OUT:
                     {
+                        // write a single char to the console
+                        putc((char)registers[R_R0], stdout);
+                        fflush(stdout);
                         break;
                     }
                     case TRAP_PUTS:
-                    {
+                    {   
+                        // write a word string (ASCII chars) to the console, starting addr
+                        // is stored in R0, writing terminates when NULL (x0000) char is encountered
+                        uint16_t str_ptr = memory + registers[R_R0];
+                        while (*str_ptr) {
+                            putc((char)*str_ptr, stdout);
+                            ++str_ptr;
+                        }
+                        fflush(stdout);
                         break;
                     }
                     case TRAP_IN:
