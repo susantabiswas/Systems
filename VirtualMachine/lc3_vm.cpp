@@ -143,7 +143,8 @@ void read_image_file(FILE* file) {
     uint16_t origin = 0;
     // read only the 1st line, this will give us the starting address of the program
     fread(&origin, sizeof(uint16_t), 1, file);
-
+    origin = swap_byte_layout16(origin);
+    
     // max no. of memory words that can be placed if we start from origin
     int max_lines = MEMORY_MAX - origin;
     // pos in memory where the file will be loaded
