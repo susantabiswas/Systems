@@ -276,14 +276,14 @@ int main(int argc, const char* argv[]) {
             case OP_ADD:
             {
                 // Has 2 variants: ADD and ADD IMM
-                // ADD DR, SR1, 0, 00, SR2 -> DR : SR1 + SR2
-                // ADD DR, SR1, 1, IMM5 -> DR : SR1 + IMM5
+                // ADD DR, SR1, 0, 00, SR2; DR : SR1 + SR2
+                // ADD DR, SR1, 1, IMM5; DR : SR1 + IMM5
                 // get the 5th pos bit to decide the variant to use
                 uint16_t imm_mode = (instruction >> 5) & 0x1;
                 // destination register
-                uint16_t dr = (instruction >> 9) & 0x07; // each operand is 3bits long
+                uint16_t dr = (instruction >> 9) & 0x7; // each operand is 3bits long
                 // source register 1
-                uint16_t sr1 = (instruction >> 6) & 0x07;
+                uint16_t sr1 = (instruction >> 6) & 0x7;
 
                 if (imm_mode) {
                     // if immediate mode, then the last 5bits are the immediate value
@@ -294,7 +294,7 @@ int main(int argc, const char* argv[]) {
                 }
                 else {
                     // source register 2
-                    uint16_t sr2 = (instruction & 0x07);
+                    uint16_t sr2 = (instruction & 0x7);
                     registers[dr] = registers[sr1] + registers[sr2];
                 }
 
@@ -304,14 +304,14 @@ int main(int argc, const char* argv[]) {
             case OP_AND:
             {
                 // Has 2 variants: AND and AND IMM
-                // AND DR, SR1, 0, 00, SR2 -> DR : SR1 AND SR2
-                // AND DR, SR1, 1, IMM5 -> DR : SR1 AND IMM5
+                // AND DR, SR1, 0, 00, SR2; DR : SR1 AND SR2
+                // AND DR, SR1, 1, IMM5; DR : SR1 AND IMM5
                 // get the 5th pos bit to decide the variant to use
                 uint16_t imm_mode = (instruction >> 5) & 0x1;
                 // destination register
-                uint16_t dr = (instruction >> 9) & 0x07; // each operand is 3bits long
+                uint16_t dr = (instruction >> 9) & 0x7; // each operand is 3bits long
                 // source register 1
-                uint16_t sr1 = (instruction >> 6) & 0x07;
+                uint16_t sr1 = (instruction >> 6) & 0x7;
 
                 if (imm_mode) {
                     // if immediate mode, then the last 5bits are the immediate value
@@ -322,7 +322,7 @@ int main(int argc, const char* argv[]) {
                 }
                 else {
                     // source register 2
-                    uint16_t sr2 = (instruction & 0x07);
+                    uint16_t sr2 = (instruction & 0x7);
                     registers[dr] = registers[sr1] & registers[sr2];
                 }
 
@@ -332,7 +332,7 @@ int main(int argc, const char* argv[]) {
             case OP_BR:
             {   // Checks the condition flag with condition register and branches to the PC offset if same
                 // n|z|p|PCOffset(9b)
-                uint16_t nzp = (instruction >> 9) & 0x07;
+                uint16_t nzp = (instruction >> 9) & 0x7;
                 uint16_t pc_offset = (instruction & 0x1FF);
 
                 if (nzp & registers[R_COND])
@@ -341,7 +341,8 @@ int main(int argc, const char* argv[]) {
             }
             case OP_JMP:
             {   // Jump to the address stored in the base register
-                uint16_t base_reg = (instruction >> 5) & 0x07;
+                // JMP 000 BaseR(3b) 000000; PC = BaseR
+                uint16_t base_reg = (instruction >> 5) & 0x7;
                 registers[R_PC] = registers[base_reg];
                 break;
             }
@@ -349,9 +350,9 @@ int main(int argc, const char* argv[]) {
             {   // Save the current PC in R7 and then jump to the address depending on the variant
                 registers[R_R7] = registers[R_PC];
                 // Jump to the address stored in the PC offset
-                // JSR: 1|PCOffset(11b)
+                // JSR: 1|PCOffset(11b); PC = PC + SIGNEXT(PCOffset)
                 // Jump to the address stored in the base register
-                // JSRR: 0|00|BaseR(3b)|PCOffset(6b)
+                // JSRR: 0|00|BaseR(3b)|PCOffset(6b); PC = BaseR
                 
                 // check the 11th bit to decide the variant
                 uint16_t flag = (instruction >> 11) & 0x1;
@@ -363,13 +364,44 @@ int main(int argc, const char* argv[]) {
                 break;
             }
             case OP_LD:
+            {
+                // Load the value from the memory location to the destination register
+                // LD DR(3b), PCOffset(9b); DR = mem[PC + SIGNEXT(PCOffset)]
+                uint16_t dr = (instruction >> 9) & 0x7;
+                uint16_t pc_offset = sign_extend_bits(9, instruction & 0x1FF);
+                registers[dr] = memory_read(registers[R_PC] + pc_offset);
+                update_cond_flag(dr);
                 break;
+            }
             case OP_LDI:
+            {
+                // LDI DR(3b), PCOffset(9b); DR = mem[mem[PC + SIGNEXT(PCOffset)]]
+                uint16_t dr = (instruction >> 9) & 0x7;
+                uint16_t pc_offset = sign_extend_bits(9, instruction & 0x1FF);
+                registers[dr] = memory_read(memory_read(registers[R_PC] + pc_offset));
+                update_cond_flag(dr);
                 break;
+            }
             case OP_LDR:
+            {
+                // LDR DR(3b), BaseR(3b), Offset(6b); DR = mem[BaseR + Offset]
+                uint16_t dr = (instruction >> 9) & 0x7;
+                uint16_t base_r = (instruction >> 6) & 0x7;
+                uint16_t offset = sign_extend_bits(6, instruction & 0x3F);
+
+                registers[dr] = memory_read(registers[base_r] + offset);
+                update_cond_flag(dr);
                 break;
+            }
             case OP_LEA:
+            {
+                // LEA DR(3b), PCOffset(9b); DR = PC + SIGNEXT(PCOffset)
+                uint16_t dr = (instruction >> 9) & 0x7;
+                uint16_t pc_offset = sign_extend_bits(9, instruction & 0x1FF);
+                registers[dr] = registers[R_PC] + pc_offset;
+                update_cond_flag(dr);
                 break;
+            }
             case OP_NOT:
                 break;
             case OP_RES:
