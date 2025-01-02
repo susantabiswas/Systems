@@ -243,6 +243,285 @@ void interrupt_handler(int signal) {
 
 #pragma endregion VM utils
 
+bool eval_instruction(uint16_t instruction, uint16_t opcode, bool run) {
+    switch (opcode) {
+        case OP_ADD:
+        {
+            // Has 2 variants: ADD and ADD IMM
+            // ADD DR, SR1, 0, 00, SR2; DR : SR1 + SR2
+            // ADD DR, SR1, 1, IMM5; DR : SR1 + IMM5
+            // get the 5th pos bit to decide the variant to use
+            uint16_t imm_mode = (instruction >> 5) & 0x1;
+            // destination register
+            uint16_t dr = (instruction >> 9) & 0x7; // each operand is 3bits long
+            // source register 1
+            uint16_t sr1 = (instruction >> 6) & 0x7;
+
+            if (imm_mode) {
+                // if immediate mode, then the last 5bits are the immediate value
+                // 0x1F = 0001 1111
+                // expand the immediate value to full 16bits
+                uint16_t imm5 = sign_extend_bits(5, instruction & 0x1F);
+                registers[dr] = registers[sr1] + imm5;
+            }
+            else {
+                // source register 2
+                uint16_t sr2 = (instruction & 0x7);
+                registers[dr] = registers[sr1] + registers[sr2];
+            }
+
+            update_cond_flag(dr);
+            break;
+        }
+        case OP_AND:
+        {
+            // Has 2 variants: AND and AND IMM
+            // AND DR, SR1, 0, 00, SR2; DR : SR1 AND SR2
+            // AND DR, SR1, 1, IMM5; DR : SR1 AND IMM5
+            // get the 5th pos bit to decide the variant to use
+            uint16_t imm_mode = (instruction >> 5) & 0x1;
+            // destination register
+            uint16_t dr = (instruction >> 9) & 0x7; // each operand is 3bits long
+            // source register 1
+            uint16_t sr1 = (instruction >> 6) & 0x7;
+
+            if (imm_mode) {
+                // if immediate mode, then the last 5bits are the immediate value
+                // 0x1F = 0001 1111
+                // expand the immediate value to full 16bits
+                uint16_t imm5 = sign_extend_bits(5, instruction & 0x1F);
+                registers[dr] = registers[sr1] & imm5;
+            }
+            else {
+                // source register 2
+                uint16_t sr2 = (instruction & 0x7);
+                registers[dr] = registers[sr1] & registers[sr2];
+            }
+
+            update_cond_flag(dr);
+            break;
+        }
+        case OP_BR:
+        {   // Branch
+            // Checks the condition flag with condition register and branches to the PC offset if same
+            // n|z|p|PCOffset(9b)
+            uint16_t nzp = (instruction >> 9) & 0x7;
+            uint16_t pc_offset = sign_extend_bits(9, instruction & 0x1FF);
+
+            if (nzp & registers[R_COND])
+                registers[R_PC] += pc_offset;
+            break;
+        }
+        case OP_JMP:
+        {   // Jump (RET when used with R7)
+            // Jump to the address stored in the base register
+            // JMP 000 BaseR(3b) 000000; PC = BaseR
+            uint16_t base_reg = (instruction >> 6) & 0x7;
+            registers[R_PC] = registers[base_reg];
+            break;
+        }
+        case OP_JSR:
+        {   // Jump register
+            // Save the current PC in R7 and then jump to the address depending on the variant
+            registers[R_R7] = registers[R_PC];
+            // Jump to the address stored in the PC offset
+            // JSR: 1|PCOffset(11b); PC = PC + SIGNEXT(PCOffset)
+            // Jump to the address stored in the base register
+            // JSRR: 0|00|BaseR(3b)|PCOffset(6b); PC = BaseR
+            
+            // check the 11th bit to decide the variant
+            uint16_t flag = (instruction >> 11) & 0x1;
+
+            if (flag) // JSR
+                registers[R_PC] += sign_extend_bits(11, instruction & 0x7FF);
+            else // JSRR
+                registers[R_PC] = registers[(instruction >> 6) & 0x7];
+            break;
+        }
+        case OP_LD:
+        {   // Load
+            // Load the value from the memory location to the destination register
+            // LD DR(3b), PCOffset(9b); DR = mem[PC + SIGNEXT(PCOffset)]
+            uint16_t dr = (instruction >> 9) & 0x7;
+            uint16_t pc_offset = sign_extend_bits(9, instruction & 0x1FF);
+            registers[dr] = memory_read(registers[R_PC] + pc_offset);
+            update_cond_flag(dr);
+            break;
+        }
+        case OP_LDI:
+        {   // Load Indirect
+            // LDI DR(3b), PCOffset(9b); DR = mem[mem[PC + SIGNEXT(PCOffset)]]
+            uint16_t dr = (instruction >> 9) & 0x7;
+            uint16_t pc_offset = sign_extend_bits(9, instruction & 0x1FF);
+            registers[dr] = memory_read(memory_read(registers[R_PC] + pc_offset));
+            update_cond_flag(dr);
+            break;
+        }
+        case OP_LDR:
+        {   // Load register
+            // LDR DR(3b), BaseR(3b), Offset(6b); DR = mem[BaseR + Offset]
+            uint16_t dr = (instruction >> 9) & 0x7;
+            uint16_t base_r = (instruction >> 6) & 0x7;
+            uint16_t offset = sign_extend_bits(6, instruction & 0x3F);
+
+            registers[dr] = memory_read(registers[base_r] + offset);
+            update_cond_flag(dr);
+            break;
+        }
+        case OP_LEA:
+        {   // Load effective address
+            // LEA DR(3b), PCOffset(9b); DR = PC + SIGNEXT(PCOffset)
+            uint16_t dr = (instruction >> 9) & 0x7;
+            uint16_t pc_offset = sign_extend_bits(9, instruction & 0x1FF);
+            registers[dr] = registers[R_PC] + pc_offset;
+            update_cond_flag(dr);
+            break;
+        }
+        case OP_NOT:
+        {   // Bitwise not
+            // NOT DR(3b), SR(3b), 1, 11111; DR = NOT SR
+            uint16_t dr = (instruction >> 9) & 0x7;
+            uint16_t sr = (instruction >> 6) & 0x7;
+            registers[dr] = ~registers[sr];
+            update_cond_flag(dr);
+            break;
+        }
+        case OP_RES:
+        {    // reserved, illegal opcode exception thrown
+            break;
+        }
+        case OP_RTI:
+        {
+            // unused in the VM but in the actual LC-3 system it is 
+            // used is used to return from an interrupt service routine (ISR)
+            // and restore the previous processor state. In a real LC-3 machine, 
+            // this involves switching from a privileged mode (used during the interrupt handling) 
+            // back to the user mode and restoring the program counter (PC) and 
+            // processor status register (PSR) from the stack.
+            break;
+        }
+        case OP_ST:
+        {   // Store
+            // ST SR(3b), PCOffset(9b); mem[PC + SIGNEXT(PCOffset)] = SR
+            uint16_t sr = (instruction >> 9) & 0x7;
+            uint16_t pc_offset = sign_extend_bits(9, instruction & 0x1FF);
+            memory_write(registers[sr], registers[R_PC] + pc_offset);
+            break;
+        }
+        case OP_STI:
+        {   // Store Indirect
+            // STI SR(3b), PCOffset(9b); mem[mem[PC + SIGNEXT(PCOffset)]] = SR
+            uint16_t sr = (instruction >> 9) & 0x7;
+            uint16_t pc_offset = sign_extend_bits(9, instruction & 0x1FF);
+            memory_write(registers[sr], memory_read(registers[R_PC] + pc_offset));
+            break;
+        }
+        case OP_STR:
+        {   // Store register
+            // STR SR(3b), BaseR(3b), Offset(6b); mem[BaseR + SIGNEXT(PCOffset)] = SR
+            uint16_t sr = (instruction >> 9) & 0x7;
+            uint16_t base_r = (instruction >> 6) & 0x7;
+            uint16_t offset = sign_extend_bits(6, instruction & 0x3F);
+            memory_write(registers[sr], registers[base_r] + offset);
+            break;
+        }
+        case OP_TRAP:
+        {
+            // Trap routines are used to perform high-privilege operations in the LC-3 system.
+            // TRAP vector is 8 bits long, so the trap code is in the last 8 bits of the instruction
+            // Usually the trap routines are saved in the memory and the trap vector (x0000 to x00FF (256 locs))
+            // contains the starting memory location of each trap routine. When a trap instruction is executed, the PC is saved
+            // and the trap routine number is used to fetch the routine's memory addr from the trap vector.
+            // Eg TRAP x20 ; Directs the operating system to execute the GETC system call.
+            // ; The starting address of this system call is contained in memory location x0020.
+
+            // TRAP: 1111 0000 | trapvect8(8b)
+            // save the PC in R7 first before jumping to trap routine
+            registers[R_R7] = registers[R_PC];
+            // get the trap code from the last 8 bits (trapvect8)
+            uint16_t trap_code = instruction & 0xFF;
+
+            // NOTE: Since we are writing a VM to simulate the Lc3 arch, to make things simpler, instead of saving the routines at the
+            // specified memory locations and using trap vectors, we can instead handle it via the control flow similar to opcodes.
+            // In the OS implementation, the trap routines would have been saved in the memory locs and trap
+            // vector would have been used to get the routine's memory addr.
+            switch (trap_code) {
+                case TRAP_GETC:
+                {
+                    // read a single char from the keyboard and store it in R0
+                    registers[R_R0] = (uint16_t)getchar();
+                    update_cond_flag(R_R0);
+                    break;
+                }
+                case TRAP_OUT:
+                {
+                    // write a single char to the console
+                    putc((char)registers[R_R0], stdout);
+                    fflush(stdout);
+                    break;
+                }
+                case TRAP_PUTS:
+                {   
+                    // write a word string (ASCII chars) to the console, starting addr
+                    // is stored in R0, writing terminates when NULL (x0000) char is encountered
+                    // NOTE: one char per memory location (16bits or 2B)
+                    uint16_t* str_ptr = memory + registers[R_R0];
+                    while (*str_ptr) {
+                        putc((char)*str_ptr, stdout);
+                        ++str_ptr;
+                    }
+                    fflush(stdout);
+                    break;
+                }
+                case TRAP_IN:
+                {
+                    // show a prompt, read a single char from the keyboard and store it in R0 and also write to console
+                    cout << "Enter a character";
+                    char ch = getchar();
+                    putc(ch, stdout);
+                    fflush(stdout);
+                    registers[R_R0] = (uint16_t)ch;
+                    update_cond_flag(R_R0);
+                    break;
+                }
+                case TRAP_PUTSP:
+                {
+                    // write a byte string to the console, starting addr is stored in R0
+                    // Note: Here there are 2 chars per memory location, so each char per Byte.
+                    // We need to split the 16bit word into 2 bytes and write them to console
+                    uint16_t* str_ptr = memory + registers[R_R0];
+                    while(str_ptr) {
+                        char ch1 = (*str_ptr) & 0xFF; // 1st Byte
+                        char ch2 = (*str_ptr) >> 8; // 2nd Byte
+                        putc(ch1, stdout);
+                        // in case of only single char, 2nd byte will be 0
+                        if (ch2)
+                            putc(ch2, stdout);
+                        ++str_ptr;
+                    }
+                    fflush(stdout);
+                    break;
+                }
+                case TRAP_HALT:
+                {
+                    cout << "Program Halted" << endl;
+                    run = false;
+                    break;
+                }
+                default:
+                break;
+            }
+            break;
+        }
+        default:
+        {
+            abort();
+            break;
+        }
+    }
+    return run;
+}
+
 int main(int argc, const char* argv[]) {
     if (argc < 2) {
         cout << "Usage: lc3 <image-file>\n";
@@ -261,7 +540,7 @@ int main(int argc, const char* argv[]) {
     registers[R_COND] = FL_ZRO; // reset the condition flag
     registers[R_PC] = 0x3000; // start at the default 0x3000 mem addr
 
-    cout << "LC-3 VM started..." << endl;
+    cout << "Booting up LC-3 Virtual Machine..." << endl;
     bool run = true;
 
     // Instruction cycle control loop
@@ -270,286 +549,10 @@ int main(int argc, const char* argv[]) {
 
         // fetch the instr pointed by PC
         uint16_t instruction = memory_read(registers[R_PC]++);
-        // decode and execute
+        // decode
         uint16_t opcode = instruction >> 12; // first 4 bits is opcode
-        
-        switch (opcode) {
-            case OP_ADD:
-            {
-                // Has 2 variants: ADD and ADD IMM
-                // ADD DR, SR1, 0, 00, SR2; DR : SR1 + SR2
-                // ADD DR, SR1, 1, IMM5; DR : SR1 + IMM5
-                // get the 5th pos bit to decide the variant to use
-                uint16_t imm_mode = (instruction >> 5) & 0x1;
-                // destination register
-                uint16_t dr = (instruction >> 9) & 0x7; // each operand is 3bits long
-                // source register 1
-                uint16_t sr1 = (instruction >> 6) & 0x7;
-
-                if (imm_mode) {
-                    // if immediate mode, then the last 5bits are the immediate value
-                    // 0x1F = 0001 1111
-                    // expand the immediate value to full 16bits
-                    uint16_t imm5 = sign_extend_bits(5, instruction & 0x1F);
-                    registers[dr] = registers[sr1] + imm5;
-                }
-                else {
-                    // source register 2
-                    uint16_t sr2 = (instruction & 0x7);
-                    registers[dr] = registers[sr1] + registers[sr2];
-                }
-
-                update_cond_flag(dr);
-                break;
-            }
-            case OP_AND:
-            {
-                // Has 2 variants: AND and AND IMM
-                // AND DR, SR1, 0, 00, SR2; DR : SR1 AND SR2
-                // AND DR, SR1, 1, IMM5; DR : SR1 AND IMM5
-                // get the 5th pos bit to decide the variant to use
-                uint16_t imm_mode = (instruction >> 5) & 0x1;
-                // destination register
-                uint16_t dr = (instruction >> 9) & 0x7; // each operand is 3bits long
-                // source register 1
-                uint16_t sr1 = (instruction >> 6) & 0x7;
-
-                if (imm_mode) {
-                    // if immediate mode, then the last 5bits are the immediate value
-                    // 0x1F = 0001 1111
-                    // expand the immediate value to full 16bits
-                    uint16_t imm5 = sign_extend_bits(5, instruction & 0x1F);
-                    registers[dr] = registers[sr1] & imm5;
-                }
-                else {
-                    // source register 2
-                    uint16_t sr2 = (instruction & 0x7);
-                    registers[dr] = registers[sr1] & registers[sr2];
-                }
-
-                update_cond_flag(dr);
-                break;
-            }
-            case OP_BR:
-            {   // Branch
-                // Checks the condition flag with condition register and branches to the PC offset if same
-                // n|z|p|PCOffset(9b)
-                uint16_t nzp = (instruction >> 9) & 0x7;
-                uint16_t pc_offset = sign_extend_bits(9, instruction & 0x1FF);
-
-                if (nzp & registers[R_COND])
-                    registers[R_PC] += pc_offset;
-                break;
-            }
-            case OP_JMP:
-            {   // Jump (RET when used with R7)
-                // Jump to the address stored in the base register
-                // JMP 000 BaseR(3b) 000000; PC = BaseR
-                uint16_t base_reg = (instruction >> 6) & 0x7;
-                registers[R_PC] = registers[base_reg];
-                break;
-            }
-            case OP_JSR:
-            {   // Jump register
-                // Save the current PC in R7 and then jump to the address depending on the variant
-                registers[R_R7] = registers[R_PC];
-                // Jump to the address stored in the PC offset
-                // JSR: 1|PCOffset(11b); PC = PC + SIGNEXT(PCOffset)
-                // Jump to the address stored in the base register
-                // JSRR: 0|00|BaseR(3b)|PCOffset(6b); PC = BaseR
-                
-                // check the 11th bit to decide the variant
-                uint16_t flag = (instruction >> 11) & 0x1;
-
-                if (flag) // JSR
-                    registers[R_PC] += sign_extend_bits(11, instruction & 0x7FF);
-                else // JSRR
-                    registers[R_PC] = registers[(instruction >> 6) & 0x7];
-                break;
-            }
-            case OP_LD:
-            {   // Load
-                // Load the value from the memory location to the destination register
-                // LD DR(3b), PCOffset(9b); DR = mem[PC + SIGNEXT(PCOffset)]
-                uint16_t dr = (instruction >> 9) & 0x7;
-                uint16_t pc_offset = sign_extend_bits(9, instruction & 0x1FF);
-                registers[dr] = memory_read(registers[R_PC] + pc_offset);
-                update_cond_flag(dr);
-                break;
-            }
-            case OP_LDI:
-            {   // Load Indirect
-                // LDI DR(3b), PCOffset(9b); DR = mem[mem[PC + SIGNEXT(PCOffset)]]
-                uint16_t dr = (instruction >> 9) & 0x7;
-                uint16_t pc_offset = sign_extend_bits(9, instruction & 0x1FF);
-                registers[dr] = memory_read(memory_read(registers[R_PC] + pc_offset));
-                update_cond_flag(dr);
-                break;
-            }
-            case OP_LDR:
-            {   // Load register
-                // LDR DR(3b), BaseR(3b), Offset(6b); DR = mem[BaseR + Offset]
-                uint16_t dr = (instruction >> 9) & 0x7;
-                uint16_t base_r = (instruction >> 6) & 0x7;
-                uint16_t offset = sign_extend_bits(6, instruction & 0x3F);
-
-                registers[dr] = memory_read(registers[base_r] + offset);
-                update_cond_flag(dr);
-                break;
-            }
-            case OP_LEA:
-            {   // Load effective address
-                // LEA DR(3b), PCOffset(9b); DR = PC + SIGNEXT(PCOffset)
-                uint16_t dr = (instruction >> 9) & 0x7;
-                uint16_t pc_offset = sign_extend_bits(9, instruction & 0x1FF);
-                registers[dr] = registers[R_PC] + pc_offset;
-                update_cond_flag(dr);
-                break;
-            }
-            case OP_NOT:
-            {   // Bitwise not
-                // NOT DR(3b), SR(3b), 1, 11111; DR = NOT SR
-                uint16_t dr = (instruction >> 9) & 0x7;
-                uint16_t sr = (instruction >> 6) & 0x7;
-                registers[dr] = ~registers[sr];
-                update_cond_flag(dr);
-                break;
-            }
-            case OP_RES:
-            {    // reserved, illegal opcode exception thrown
-                break;
-            }
-            case OP_RTI:
-            {
-                // unused in the VM but in the actual LC-3 system it is 
-                // used is used to return from an interrupt service routine (ISR)
-                // and restore the previous processor state. In a real LC-3 machine, 
-                // this involves switching from a privileged mode (used during the interrupt handling) 
-                // back to the user mode and restoring the program counter (PC) and 
-                // processor status register (PSR) from the stack.
-                break;
-            }
-            case OP_ST:
-            {   // Store
-                // ST SR(3b), PCOffset(9b); mem[PC + SIGNEXT(PCOffset)] = SR
-                uint16_t sr = (instruction >> 9) & 0x7;
-                uint16_t pc_offset = sign_extend_bits(9, instruction & 0x1FF);
-                memory_write(registers[sr], registers[R_PC] + pc_offset);
-                break;
-            }
-            case OP_STI:
-            {   // Store Indirect
-                // STI SR(3b), PCOffset(9b); mem[mem[PC + SIGNEXT(PCOffset)]] = SR
-                uint16_t sr = (instruction >> 9) & 0x7;
-                uint16_t pc_offset = sign_extend_bits(9, instruction & 0x1FF);
-                memory_write(registers[sr], memory_read(registers[R_PC] + pc_offset));
-                break;
-            }
-            case OP_STR:
-            {   // Store register
-                // STR SR(3b), BaseR(3b), Offset(6b); mem[BaseR + SIGNEXT(PCOffset)] = SR
-                uint16_t sr = (instruction >> 9) & 0x7;
-                uint16_t base_r = (instruction >> 6) & 0x7;
-                uint16_t offset = sign_extend_bits(6, instruction & 0x3F);
-                memory_write(registers[sr], registers[base_r] + offset);
-                break;
-            }
-            case OP_TRAP:
-            {
-                // Trap routines are used to perform high-privilege operations in the LC-3 system.
-                // TRAP vector is 8 bits long, so the trap code is in the last 8 bits of the instruction
-                // Usually the trap routines are saved in the memory and the trap vector (x0000 to x00FF (256 locs))
-                // contains the starting memory location of each trap routine. When a trap instruction is executed, the PC is saved
-                // and the trap routine number is used to fetch the routine's memory addr from the trap vector.
-                // Eg TRAP x20 ; Directs the operating system to execute the GETC system call.
-                // ; The starting address of this system call is contained in memory location x0020.
-
-                // TRAP: 1111 0000 | trapvect8(8b)
-                // save the PC in R7 first before jumping to trap routine
-                registers[R_R7] = registers[R_PC];
-                // get the trap code from the last 8 bits (trapvect8)
-                uint16_t trap_code = instruction & 0xFF;
-
-                // NOTE: Since we are writing a VM to simulate the Lc3 arch, to make things simpler, instead of saving the routines at the
-                // specified memory locations and using trap vectors, we can instead handle it via the control flow similar to opcodes.
-                // In the OS implementation, the trap routines would have been saved in the memory locs and trap
-                // vector would have been used to get the routine's memory addr.
-                switch (trap_code) {
-                    case TRAP_GETC:
-                    {
-                        // read a single char from the keyboard and store it in R0
-                        registers[R_R0] = (uint16_t)getchar();
-                        update_cond_flag(R_R0);
-                        break;
-                    }
-                    case TRAP_OUT:
-                    {
-                        // write a single char to the console
-                        putc((char)registers[R_R0], stdout);
-                        fflush(stdout);
-                        break;
-                    }
-                    case TRAP_PUTS:
-                    {   
-                        // write a word string (ASCII chars) to the console, starting addr
-                        // is stored in R0, writing terminates when NULL (x0000) char is encountered
-                        // NOTE: one char per memory location (16bits or 2B)
-                        uint16_t* str_ptr = memory + registers[R_R0];
-                        while (*str_ptr) {
-                            putc((char)*str_ptr, stdout);
-                            ++str_ptr;
-                        }
-                        fflush(stdout);
-                        break;
-                    }
-                    case TRAP_IN:
-                    {
-                        // show a prompt, read a single char from the keyboard and store it in R0 and also write to console
-                        cout << "Enter a character";
-                        char ch = getchar();
-                        putc(ch, stdout);
-                        fflush(stdout);
-                        registers[R_R0] = (uint16_t)ch;
-                        update_cond_flag(R_R0);
-                        break;
-                    }
-                    case TRAP_PUTSP:
-                    {
-                        // write a byte string to the console, starting addr is stored in R0
-                        // Note: Here there are 2 chars per memory location, so each char per Byte.
-                        // We need to split the 16bit word into 2 bytes and write them to console
-                        uint16_t* str_ptr = memory + registers[R_R0];
-                        while(str_ptr) {
-                            char ch1 = (*str_ptr) & 0xFF; // 1st Byte
-                            char ch2 = (*str_ptr) >> 8; // 2nd Byte
-                            putc(ch1, stdout);
-                            // in case of only single char, 2nd byte will be 0
-                            if (ch2)
-                                putc(ch2, stdout);
-                            ++str_ptr;
-                        }
-                        fflush(stdout);
-                        break;
-                    }
-                    case TRAP_HALT:
-                    {
-                        cout << "Program Halted" << endl;
-                        run = false;
-                        break;
-                    }
-                    default:
-                    {
-                        break;
-                    }
-                }
-                break;
-            }
-            default:
-            {
-                abort();
-                break;
-            }
-        }
+        // execute
+        run = eval_instruction(instruction, opcode, run);
     }
 
     restore_input_buffering();
